@@ -1,7 +1,7 @@
-# Docker PHP-FPM 8.2 & Nginx 1.24 on Alpine Linux
-Example PHP-FPM 8.2 & Nginx 1.24 container image for Docker, built on [Alpine Linux](https://www.alpinelinux.org/).
+# Docker PHP-FPM 8.2 & Nginx 1.24 on Alpine Linux for Cyberkit Dispatcher 
+RHD Cyberkit Dispatcher - PHP-FPM 8.2 & Nginx 1.24 container image for Docker, built on [Alpine Linux](https://www.alpinelinux.org/).
 
-Repository: https://github.com/TrafeX/docker-php-nginx
+Repository: 
 
 
 * Built on the lightweight and secure Alpine Linux distribution
@@ -19,15 +19,15 @@ Repository: https://github.com/TrafeX/docker-php-nginx
 ![php 8.2](https://img.shields.io/badge/php-8.2-brightgreen.svg)
 ![License MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 
-## [![Trafex Consultancy](https://timdepater.com/logo/mini-logo.png)](https://timdepater.com?mtm_campaign=github)
-I can help you with [Containerization, Kubernetes, Monitoring, Infrastructure as Code and other DevOps challenges](https://timdepater.com/?mtm_campaign=github).
-
-
-## Goal of this project
-The goal of this container image is to provide an example for running Nginx and PHP-FPM in a container which follows
-the best practices and is easy to understand and modify to your needs.
 
 ## Usage
+Build the image :
+
+    docker build -t dispatcher-rhdcyberkit:<version> -t dispatcher-rhdcyberkit:latest  .
+
+Save the image for exporting:
+
+    docker save -o dispatcher-rhdcyberkit_v0.0.1.tar  dispatcher-rhdcyberkit:v0.0.1
 
 Start the Docker container:
 
