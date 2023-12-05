@@ -228,30 +228,57 @@ function operationsLog($op,$user,$app,$deviceId){
      mysqli_close($link);
     return $ret;	
  }
+
+ function getMinDateFromList($idl,$lastUpdate){
+    if(trim($lastUpdate)!=""){
+            if (is_numeric($lastUpdate) && (string)(int)$lastUpdate === $lastUpdate
+                    && $lastUpdate <= PHP_INT_MAX
+                    && $lastUpdate >= ~PHP_INT_MAX) {
+                    // La variabile $lastUpdate contiene un timestamp UNIX valido
+                    
+                    $link = dbconnect();
+
+                    $query = "SELECT MIN(UNIX_TIMESTAMP(`datemod`)) as `dateminmod` WHERE `list`='".$idl."' ";
+                    //echo $query;
+                    $c = 0;
+                    if($result = mysqli_query( $link , $query )){
+                        while (($row = mysqli_fetch_assoc($result) )  ) { //&& $c < 5
+                            $ret = $row['dateminmod'];
+                            if(((int)$lastUpdate)<((int)$ret)){
+                                $lastUpdate = "";
+                            }
+                        }
+                    }
+                    mysqli_close($link);
+                } 
+    }
+    return $lastUpdate;	
+}
+
  function getUrlsFromList($idl,$lastUpdate){
-  $ret = array();
-  $link = dbconnect();
-  $wh = "";
-  if(trim($lastUpdate)!=""){
-          if (is_numeric($lastUpdate) && (string)(int)$lastUpdate === $lastUpdate
-                 && $lastUpdate <= PHP_INT_MAX
-                 && $lastUpdate >= ~PHP_INT_MAX) {
-                 // La variabile $lastUpdate contiene un timestamp UNIX valido
-                 $wh = " AND UNIX_TIMESTAMP(`datemod`) >= $lastUpdate ";
-             } 
-              
-  }
-  $query = "SELECT `id`,`url`,`type`,`description`, UNIX_TIMESTAMP(`datemod`) as `datemod`,`datemod` as `verdate`, `deleted` FROM `blk_urls` WHERE `list`='".$idl."'".$wh;
-  //echo $query;
+        $ret = array();
+        $link = dbconnect();
+        $wh = "";
+        if(trim($lastUpdate)!=""){
+                if (is_numeric($lastUpdate) && (string)(int)$lastUpdate === $lastUpdate
+                        && $lastUpdate <= PHP_INT_MAX
+                        && $lastUpdate >= ~PHP_INT_MAX) {
+                        // La variabile $lastUpdate contiene un timestamp UNIX valido
+                        $wh = " AND UNIX_TIMESTAMP(`datemod`) >= $lastUpdate ";
+                    } 
+                    
+        }
+        $query = "SELECT `id`,`url`,`type`,`description`, UNIX_TIMESTAMP(`datemod`) as `datemod`,`datemod` as `verdate`, `deleted` FROM `blk_urls` WHERE `list`='".$idl."'".$wh;
+        //echo $query;
         $c = 0;
         if($result = mysqli_query( $link , $query )){
             while (($row = mysqli_fetch_assoc($result) )  ) { //&& $c < 5
                 $ret[] = $row;
                 //print_r($row);
              $c++;
-         }
-     }
-     mysqli_close($link);
+            }
+        }
+        mysqli_close($link);
   return $ret;	
  }
  function getSmsListFromApp($idTrack){
@@ -460,7 +487,9 @@ if($_GET["debug"]=="1"){
 
  $meta = getMetaSmsFromList($idTrack);
 
- if(trim($meta['mintimestamp'])!="" ){
+ $lastUpdate = getMinDateFromList($meta['id'],$lastUpdate);
+
+ if($lastUpdate != "" && trim($meta['mintimestamp'])!="" ){
     $mintimestamp = $meta['mintimestamp'];
     if (is_numeric($mintimestamp) && (string)(int)$mintimestamp === $mintimestamp
                && $mintimestamp <= PHP_INT_MAX
@@ -528,7 +557,9 @@ if($_GET["debug"]=="1"){
  
  $meta = getMetaFromList($idTrack);
 
- if(trim($meta['mintimestamp'])!="" ){
+ $lastUpdate = getMinDateFromList($meta['id'],$lastUpdate);
+
+ if($lastUpdate != "" && trim($meta['mintimestamp'])!="" ){
     $mintimestamp = $meta['mintimestamp'];
     if (is_numeric($mintimestamp) && (string)(int)$mintimestamp === $mintimestamp
                && $mintimestamp <= PHP_INT_MAX
