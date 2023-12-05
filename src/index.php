@@ -169,7 +169,7 @@ function operationsLog($op,$user,$app,$deviceId){
        $useri = mysqli_real_escape_string($link,$user);
        $appi = mysqli_real_escape_string($link,$app);
        $deviceIdi = mysqli_real_escape_string($link,$deviceId);
-       $ipaddress = $_SERVER['REMOTE_ADDR'];
+       $ipaddress = array_key_exists("REMOTE_ADDR", $_SERVER)?$_SERVER['REMOTE_ADDR']:"";
      
     //$query = "INSERT INTO `blk_urlblocked` (`op`, `ts`, `ip`, `user`, `app`) VALUES ('".$urli."', '0000-00-00 00:00:00', '".$ipaddress."', '".$useri."', '".$appi."');";
     $query = "INSERT INTO `blk_operations_log` (`op`, `ts`, `ip`, `user`, `deviceId`, `app`) VALUES ('".$urli."', '".date("Y-m-d H:i:s")."', '".$ipaddress."', '".$useri."', '".$deviceIdi."' , '".$appi."');";
@@ -229,7 +229,7 @@ function operationsLog($op,$user,$app,$deviceId){
     return $ret;	
  }
 
- function getMinDateFromList($idl,$lastUpdate){
+ function getSmsMinDateFromList($idl,$lastUpdate){
     if(trim($lastUpdate)!=""){
             if (is_numeric($lastUpdate) && (string)(int)$lastUpdate === $lastUpdate
                     && $lastUpdate <= PHP_INT_MAX
@@ -238,7 +238,33 @@ function operationsLog($op,$user,$app,$deviceId){
                     
                     $link = dbconnect();
 
-                    $query = "SELECT MIN(UNIX_TIMESTAMP(`datemod`)) as `dateminmod` WHERE `list`='".$idl."' ";
+                    $query = "SELECT MIN(UNIX_TIMESTAMP(`datemod`)) as `dateminmod` FROM blk_sms WHERE `list`='".$idl."' ";
+                    //echo $query;
+                    $c = 0;
+                    if($result = mysqli_query( $link , $query )){
+                        while (($row = mysqli_fetch_assoc($result) )  ) { //&& $c < 5
+                            $ret = $row['dateminmod'];
+                            if(((int)$lastUpdate)<((int)$ret)){
+                                $lastUpdate = "";
+                            }
+                        }
+                    }
+                    mysqli_close($link);
+                } 
+    }
+    return $lastUpdate;	
+}
+
+ function getUrlsMinDateFromList($idl,$lastUpdate){
+    if(trim($lastUpdate)!=""){
+            if (is_numeric($lastUpdate) && (string)(int)$lastUpdate === $lastUpdate
+                    && $lastUpdate <= PHP_INT_MAX
+                    && $lastUpdate >= ~PHP_INT_MAX) {
+                    // La variabile $lastUpdate contiene un timestamp UNIX valido
+                    
+                    $link = dbconnect();
+
+                    $query = "SELECT MIN(UNIX_TIMESTAMP(`datemod`)) as `dateminmod` FROM blk_urls WHERE `list`='".$idl."' ";
                     //echo $query;
                     $c = 0;
                     if($result = mysqli_query( $link , $query )){
@@ -379,40 +405,44 @@ function insertSmsDetected($url,$user,$app,$deviceId){
  }
  
 //global $RHD_redirect;
- $type = trim($_GET["type"]);
+ $type = array_key_exists("type", $_GET)?trim($_GET["type"]):"";
  
- $idTrack = $_POST["idTrack"];
- $user = trim($_POST["user"]);
- $rest_key = trim($_POST["rest_key"]);
- $reportUrl = trim($_POST["reportUrl"]);
- $deviceId = trim($_POST["deviceid"]);
- $blockedNumber = trim($_POST["blockedNumber"]);
- $reportSms = trim($_POST["reportSms"]);
- $lastUpdate = trim($_POST["lastUpdate"]);
+ $idTrack = array_key_exists("idTrack", $_POST)?$_POST["idTrack"]:"";
+ $user = array_key_exists("user", $_POST)?trim($_POST["user"]):"";
+ $rest_key = array_key_exists("rest_key", $_POST)?trim($_POST["rest_key"]):"";
+ $reportUrl = array_key_exists("reportUrl", $_POST)?trim($_POST["reportUrl"]):"";
+ $deviceId = array_key_exists("deviceid", $_POST)?trim($_POST["deviceid"]):"";
+ $blockedNumber = array_key_exists("blockedNumber", $_POST)?trim($_POST["blockedNumber"]):"";
+ $reportSms = array_key_exists("reportSms", $_POST)?trim($_POST["reportSms"]):"";
+ $lastUpdate = array_key_exists("lastUpdate", $_POST)?trim($_POST["lastUpdate"]):"";
  $lastUpdateBase = "";
  
  $sigenabled = true;
- 
-if($_GET["debug"]=="1"){
+if(array_key_exists("debug", $_GET) && $_GET["debug"]=="2"){
+    print_r($_SERVER);
+    print_r($_GET);
+    print_r($_POST);
+}
+if(array_key_exists("debug", $_GET) && $_GET["debug"]=="1"){
     // call https://labs.dmasotti.space/blocklist.php
     $type = "url";
- //$type = "sms";
- //$type = "call"; 
- $idTrack = "it.alfagroup.rhdcyberth.cyberThreat";
- //$idTrack = "it.alfagroup.rhdcyberth.cyberThreat";
- //$idTrack = "it.alfagroup.rhdCyberthExample.BlockExt";
-// $idTrack = "it.alfagroup.rhdCyberthExample.BlockSmsExt";
-//$idTrack = "it.alfagroup.rhdCyberth.BlockCall";
- $user = "dmasotti";
- $rest_key = "rhd";
- $deviceId = 'idxx';
- // $reportUrl = "xxx";
- 
- $lastUpdate = "";
+    //$type = "sms";
+    //$type = "call"; 
+    $idTrack = "it.alfagroup.rhdcyberth.cyberThreat";
+    //$idTrack = "it.alfagroup.rhdcyberth.cyberThreat";
+    //$idTrack = "it.alfagroup.rhdCyberthExample.BlockExt";
+    // $idTrack = "it.alfagroup.rhdCyberthExample.BlockSmsExt";
+    //$idTrack = "it.alfagroup.rhdCyberth.BlockCall";
+    $user = "dmasotti";
+    $rest_key = "rhd";
+    $deviceId = 'idxx';
+    // $reportUrl = "xxx";
+    
+    $lastUpdate = "1697786660";
  
 }
  if(trim($lastUpdate)!=""){
-          if (is_numeric($lastUpdate) && (string)(int)$lastUpdate === $lastUpdate
+        if (is_numeric($lastUpdate) && (string)(int)$lastUpdate === $lastUpdate
                  && $lastUpdate <= PHP_INT_MAX
                  && $lastUpdate >= ~PHP_INT_MAX) {
                  // La variabile $lastUpdate contiene un timestamp UNIX valido
@@ -422,10 +452,10 @@ if($_GET["debug"]=="1"){
                  if($lastUpdate > 0){
                      $lastUpdateBase = $lastUpdate;
                  }
-             } 
-              
+        } 
   }
- if($reportSms!=""){
+ 
+  if($reportSms!=""){
      insertSmsDetected($reportSms,$user,$idTrack,$deviceId);
       operationsLog('insertSmsDetected',$user,$app,$deviceId);
             echo "1:<H1>URL Inserito nel nostro db :".$reportSms." </H1>";
@@ -466,6 +496,30 @@ if($_GET["debug"]=="1"){
      }
   ob_start();
   
+ $RHD_redirect = $auth["RHD_redirect"];
+ 
+ if(trim($RHD_redirect)==""){
+    $RHD_redirect = getenv("RHD_REDIRECT");
+ }
+ 
+ if(trim($RHD_redirect)==""){
+
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https://" : "http://";
+        $url = $protocol . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+        $urlComponents = parse_url($url);
+        $pathParts = explode('/', $urlComponents['path']);
+        $lastPartIndex = count($pathParts) - 1;
+        if(strpos($pathParts[$lastPartIndex], '.') !== false) {
+            $pathParts[$lastPartIndex] = 'inxx.php';
+        } else {
+            // Se l'ultimo segmento non è un file, aggiungi inxx.php
+            $pathParts[] = 'inxx.php';
+        }
+        $newPath = implode('/', $pathParts);
+        $RHD_redirect = $urlComponents['scheme'] . '://' . $urlComponents['host'] . $newPath;
+        //$RHD_redirect =''.$_SERVER['SERVER_NAME'].'/inxx.php';
+ }
+
  
   switch($type){
     case 'sms':
@@ -487,9 +541,9 @@ if($_GET["debug"]=="1"){
 
  $meta = getMetaSmsFromList($idTrack);
 
- $lastUpdate = getMinDateFromList($meta['id'],$lastUpdate);
+ $lastUpdateBase = getSmsMinDateFromList($meta['id'],$lastUpdateBase);
 
- if($lastUpdate != "" && trim($meta['mintimestamp'])!="" ){
+ if($lastUpdateBase != "" && trim($meta['mintimestamp'])!="" ){
     $mintimestamp = $meta['mintimestamp'];
     if (is_numeric($mintimestamp) && (string)(int)$mintimestamp === $mintimestamp
                && $mintimestamp <= PHP_INT_MAX
@@ -502,13 +556,7 @@ if($_GET["debug"]=="1"){
  }
  
  $urls = getSmsFromList($meta['id'],$lastUpdateBase);
-
-
- //print_r($urls);
  
- if(trim($RHD_redirect)==""){
-       $RHD_redirect =''.$_SERVER['SERVER_NAME'].'/inxx.php';
- }
  operationsLog('getSms',$user,$idTrack,$deviceId);
 
 ?>
@@ -538,7 +586,7 @@ if($_GET["debug"]=="1"){
       break;
     case 'url': 
     default:
- $RHD_redirect = $auth["RHD_redirect"];
+ 
  $lists = $auth["lists"];
  
  $list = getListFromApp($idTrack);
@@ -557,9 +605,9 @@ if($_GET["debug"]=="1"){
  
  $meta = getMetaFromList($idTrack);
 
- $lastUpdate = getMinDateFromList($meta['id'],$lastUpdate);
+ $lastUpdateBase = getUrlsMinDateFromList($meta['id'],$lastUpdateBase);
 
- if($lastUpdate != "" && trim($meta['mintimestamp'])!="" ){
+ if($lastUpdateBase != "" && trim($meta['mintimestamp'])!="" ){
     $mintimestamp = $meta['mintimestamp'];
     if (is_numeric($mintimestamp) && (string)(int)$mintimestamp === $mintimestamp
                && $mintimestamp <= PHP_INT_MAX
@@ -574,9 +622,6 @@ if($_GET["debug"]=="1"){
  $urls = getUrlsFromList($meta['id'],$lastUpdateBase);
  //print_r($urls);
  
- if(trim($RHD_redirect)==""){
-       $RHD_redirect =''.$_SERVER['SERVER_NAME'].'/inxx.php';
- }
  operationsLog('getUrls',$user,$idTrack,$deviceId);
 
 ?>

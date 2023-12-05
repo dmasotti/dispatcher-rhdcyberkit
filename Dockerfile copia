@@ -1,0 +1,23 @@
+# Use the official PHP Alpine image as the base image
+# see : https://codepal.ai/dockerfile-writer/query/SYz5IlV4/dockerfile-alpine-php-apache-run-index
+FROM php:7.4-apache
+LABEL Maintainer="Daniele Masotti <d.masotti@alfagroup.it>"
+LABEL Description="Lightweight container with Nginx 1.24 & PHP 8.2 based on Alpine Linux."
+
+ARG MYSQL_HOST
+ENV MYSQL_HOST ${MYSQL_HOST:-"mysql"}
+
+ARG MYSQL_USER
+ENV MYSQL_USER ${MYSQL_USER:-"mysql"}
+
+ARG MYSQL_PASSWORD
+ENV MYSQL_PASSWORD ${MYSQL_PASSWORD:-"password"}
+
+ARG MYSQL_DATABASE
+ENV MYSQL_DATABASE ${MYSQL_DATABASE:-"tenant1"}
+
+#COPY --chown=nobody src/ /var/www/html/
+COPY src/ /var/www/html/
+EXPOSE 80
+RUN chmod -R a+r /var/www/html/
+

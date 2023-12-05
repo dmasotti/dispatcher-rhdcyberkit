@@ -31,36 +31,72 @@ Save the image for exporting:
 
 Start the Docker container:
 
-    docker run -p 80:8080 trafex/php-nginx
+    docker run -p 80:80 dispatcher-rhdcyberkit:latest
 
 See the PHP info on http://localhost, or the static html page on http://localhost/test.html
 
-Or mount your own code to be served by PHP-FPM & Nginx
+## Configuration docker-composer for traefik
 
-    docker run -p 80:8080 -v ~/my-codebase:/var/www/html trafex/php-nginx
+version: '3.8'
 
-## Configuration
-In [config/](config/) you'll find the default configuration files for Nginx, PHP and PHP-FPM.
-If you want to extend or customize that you can do so by mounting a configuration file in the correct folder;
+services:
+  dispatcher:
+    image: dispatcher-rhdcyberkit:latest
+    container_name: dispatcher
+    hostname: 'dispatcher'
+    restart: always
+    tty: true
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dispatcher.rule=Host(`dmrhd.ddns.net`) && PathPrefix(`/tenant1`)"
+      - "traefik.http.services.dispatcher.loadbalancer.server.port=80"
+      - "traefik.http.routers.dispatcher.middlewares=dispatcher"
+      - "traefik.http.middlewares.dispatcher.stripprefix.prefixes=/tenant1"
+      
+    networks:
+      - traefik_network
+    environment:
+      RHD_REDIRECT: "http://dmrhd.ddns.net/tenant1/inxx.php"
+      MYSQL_HOST: mysql
+      MYSQL_USER: mysql
+      MYSQL_PASSWORD: password
+      MYSQL_DATABASE: tenant1
+    
+networks:
+  traefik_network:
+    external: true
 
-Nginx configuration:
+## Traefik configuration for docker-composer 
 
-    docker run -v "`pwd`/nginx-server.conf:/etc/nginx/conf.d/server.conf" trafex/php-nginx
-
-PHP configuration:
-
-    docker run -v "`pwd`/php-setting.ini:/etc/php82/conf.d/settings.ini" trafex/php-nginx
-
-PHP-FPM configuration:
-
-    docker run -v "`pwd`/php-fpm-settings.conf:/etc/php82/php-fpm.d/server.conf" trafex/php-nginx
-
-_Note; Because `-v` requires an absolute path I've added `pwd` in the example to return the absolute path to the current directory_
-
-## Documentation and examples
-To modify this container to your specific needs please see the following examples;
-
-* [Adding xdebug support](https://github.com/TrafeX/docker-php-nginx/blob/master/docs/xdebug-support.md)
-* [Adding composer](https://github.com/TrafeX/docker-php-nginx/blob/master/docs/composer-support.md)
-* [Getting the real IP of the client behind a load balancer](https://github.com/TrafeX/docker-php-nginx/blob/master/docs/real-ip-behind-loadbalancer.md)
-* [Sending e-mails](https://github.com/TrafeX/docker-php-nginx/blob/master/docs/sending-emails.md)
+version: '3'
+ 
+services:
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    hostname: traefik
+    restart: always
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+    ports:
+      - "80:80"
+ 
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-network"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - 'traefik.http.routers.traefik.middlewares=strip'
+      - "traefik.http.routers.traefik.rule=Host(`dmrhd.ddns.net`)"
+      - 'traefik.http.middlewares.strip.stripprefix.prefixes=/traefik'
+    networks:
+      - traefik_network
+ 
+  
+networks:
+  traefik_network:
+    external: true
+  default:  
