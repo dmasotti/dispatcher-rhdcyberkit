@@ -1,6 +1,6 @@
 # Use the official PHP Alpine image as the base image
 # see : https://codepal.ai/dockerfile-writer/query/SYz5IlV4/dockerfile-alpine-php-apache-run-index
-FROM php:7.4-apache
+FROM php:8.3-apache
 LABEL Maintainer="Daniele Masotti <d.masotti@alfagroup.it>"
 LABEL Description="Lightweight container with Nginx 1.24 & PHP 8.2 based on Alpine Linux."
 
