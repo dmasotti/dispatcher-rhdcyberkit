@@ -1,9 +1,6 @@
-ARG ALPINE_VERSION=3.18
-FROM alpine:${ALPINE_VERSION}
+FROM  php:7.4.33-apache-bullseye
 LABEL Maintainer="Daniele Masotti <d.masotti@alfagroup.it>"
-LABEL Description="Lightweight container with Nginx 1.24 & PHP 8.2 based on Alpine Linux."
-# Setup document root
-WORKDIR /var/www/html
+LABEL Description=" container with apache & PHP 8.3 based on Alpine Linux."
 
 ARG MYSQL_HOST
 ENV MYSQL_HOST ${MYSQL_HOST:-"mysql"}
@@ -17,60 +14,10 @@ ENV MYSQL_PASSWORD ${MYSQL_PASSWORD:-"password"}
 ARG MYSQL_DATABASE
 ENV MYSQL_DATABASE ${MYSQL_DATABASE:-"tenant1"}
 
-# Install packages and remove default server definition
-RUN apk add --no-cache \
-  curl \
-  nginx \
-  php82 \
-  php82-ctype \
-  php82-curl \
-  php82-dom \
-  php82-fileinfo \
-  php82-fpm \
-  php82-gd \
-  php82-intl \
-  php82-mbstring \
-  php82-mysqli \
-  php82-opcache \
-  php82-openssl \
-  php82-phar \
-  php82-session \
-  php82-tokenizer \
-  php82-xml \
-  php82-xmlreader \
-  php82-xmlwriter \
-  supervisor
+RUN docker-php-ext-install mysqli && docker-php-ext-enable mysqli
 
-# Configure nginx - http
-COPY config/nginx.conf /etc/nginx/nginx.conf
-# Configure nginx - default server
-COPY config/conf.d /etc/nginx/conf.d/
-
-# Configure PHP-FPM
-ENV PHP_INI_DIR /etc/php82
-COPY config/fpm-pool.conf ${PHP_INI_DIR}/php-fpm.d/www.conf
-COPY config/php.ini ${PHP_INI_DIR}/conf.d/custom.ini
-
-# Configure supervisord
-COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-# Make sure files/folders needed by the processes are accessable when they run under the nobody user
-RUN chown -R nobody.nobody /var/www/html /run /var/lib/nginx /var/log/nginx
-
-# Create symlink for php
-RUN ln -s /usr/bin/php82 /usr/bin/php
-
-# Switch to use a non-root user from here on
-USER nobody
-
-# Add application
-COPY --chown=nobody src/ /var/www/html/
-
-# Expose the port nginx is reachable on
+#COPY --chown=nobody src/ /var/www/html/
+COPY src/ /var/www/html/
 EXPOSE 80
+RUN chmod -R a+r /var/www/html/
 
-# Let supervisord start nginx & php-fpm
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
-
-# Configure a healthcheck to validate that everything is up&running
-#HEALTHCHECK --timeout=10s CMD curl --silent --fail http://127.0.0.1:80/fpm-ping
