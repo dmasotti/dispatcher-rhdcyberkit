@@ -1,4 +1,4 @@
-FROM  php:7.4.33-apache-bullseye
+FROM  php:8.3.2-apache-bullseye
 LABEL Maintainer="Daniele Masotti <d.masotti@alfagroup.it>"
 LABEL Description=" container with apache & PHP 8.3 based on Alpine Linux."
 
