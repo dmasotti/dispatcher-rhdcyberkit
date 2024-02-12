@@ -64,7 +64,7 @@
 }
 
  function signatureHandler($buffer) {
-             global $sigenabled,$privateKey;
+             global $sigenabled,$privateKey,$encode,$gzippa;
              
              // Chiavi private e pubbliche in formato PEM come stringhe di testo
      $privateKey = "-----BEGIN PRIVATE KEY-----
@@ -137,18 +137,25 @@ DwIDAQAB
                  
                  // Utilizzo della funzione per verificare una firma
 
-                     if (verificaFirma($signedContent, $publicKeyPEM, $buffer)) {
-                         $signedContent .= "\n<!-- La firma è valida. -->";
-                     } else {
-                         $signedContent .= "\n<!-- La firma non è valida o è mancante. -->";
-                     }
+            if (verificaFirma($signedContent, $publicKeyPEM, $buffer)) {
+                // $signedContent .= "\n<!-- La firma è valida. -->";
+            } else {
+                // $signedContent .= "\n<!-- La firma non è valida o è mancante. -->";
+            }
                  
-         //return "AA";
-                 // Restituisci il contenuto firmato
-             return $signedContent;
-         }else{
-             return $buffer;
+            $buffer = $signedContent;
          }
+         if($encode) {
+            $buffer = str_replace( "+", " ", urlencode($buffer));
+         }
+         if($gzippa) {
+            $bl = strlen($buffer);
+            $buffer = gzencode($buffer, 9);
+            $bl1 = strlen($buffer);
+            $buffer .= "\n<!-- ".$bl." - ".$bl1." -->";
+
+         }
+         echo $buffer;
      }
  
  function dbconnect(){
@@ -189,7 +196,7 @@ function operationsLog($op,$user,$app,$deviceId){
          if($result = mysqli_query( $link , $query )){
                  if ($row = mysqli_fetch_assoc($result)) {
                      $ret = $row;//['lists'];
-   //$RHD_redirect = $row["RHD_redirect"];
+                    $RHD_redirect = $row["RHD_redirect"];
                     //$query = "SELECT `code` FROM `blk_lists` WHERE `id` IN ('".$lists."')";
                      if(false && $result = mysqli_query( $link , $query )){
                          while ($row = mysqli_fetch_assoc($result)) {
@@ -219,8 +226,8 @@ function operationsLog($op,$user,$app,$deviceId){
  function getMetaFromList($idTrack){
     $ret = array();
     $link = dbconnect();
-    $query = "SELECT `id`,`description`,`updated`,`mintimestamp`,`version` as `pkversion`, UNIX_TIMESTAMP(CURRENT_TIMESTAMP) as `version`, `urls`, `md5` FROM `blk_lists` WHERE id IN ( SELECT `list` FROM `blk_apps` WHERE `code`='".$idTrack."' )";
-     if($result = mysqli_query( $link , $query )){
+    $query = "SELECT `id`,`description`,`updated`,UNIX_TIMESTAMP(`mintimestamp`) as `mintimestamp`,`version` as `pkversion`, UNIX_TIMESTAMP(CURRENT_TIMESTAMP) as `version`, `urls`, `md5` FROM `blk_lists` WHERE id IN ( SELECT `list` FROM `blk_apps` WHERE `code`='".$idTrack."' )";
+    if($result = mysqli_query( $link , $query )){
       if ($row = mysqli_fetch_assoc($result)) {
        $ret = $row;
       }
@@ -229,13 +236,19 @@ function operationsLog($op,$user,$app,$deviceId){
     return $ret;	
  }
 
- function getSmsMinDateFromList($idl,$lastUpdate){
+ function getSmsMinDateFromList($idl,$lastUpdate,$meta){
     if(trim($lastUpdate)!=""){
             if (is_numeric($lastUpdate) && (string)(int)$lastUpdate === $lastUpdate
                     && $lastUpdate <= PHP_INT_MAX
                     && $lastUpdate >= ~PHP_INT_MAX) {
                     // La variabile $lastUpdate contiene un timestamp UNIX valido
-                    
+                    // verifico che sia maggiore del minimo gestito
+                    if(is_array($meta) && array_key_exists(`mintimestamp`,$meta)){
+                        if(((int)$lastUpdate)<((int)$meta[`mintimestamp`])){
+                            $lastUpdate = "";
+                            return $lastUpdate;	// è inferiore al minimo gestito FULL UPGRADE
+                        }
+                    }
                     $link = dbconnect();
 
                     $query = "SELECT MIN(UNIX_TIMESTAMP(`datemod`)) as `dateminmod` FROM blk_sms WHERE `list`='".$idl."' ";
@@ -255,13 +268,19 @@ function operationsLog($op,$user,$app,$deviceId){
     return $lastUpdate;	
 }
 
- function getUrlsMinDateFromList($idl,$lastUpdate){
+ function getUrlsMinDateFromList($idl,$lastUpdate,$meta){
     if(trim($lastUpdate)!=""){
             if (is_numeric($lastUpdate) && (string)(int)$lastUpdate === $lastUpdate
                     && $lastUpdate <= PHP_INT_MAX
                     && $lastUpdate >= ~PHP_INT_MAX) {
                     // La variabile $lastUpdate contiene un timestamp UNIX valido
-                    
+                    // verifico che sia maggiore del minimo gestito
+                    if(is_array($meta) && array_key_exists(`mintimestamp`,$meta)){
+                        if(((int)$lastUpdate)<((int)$meta[`mintimestamp`])){
+                            $lastUpdate = "";
+                            return $lastUpdate;	// è inferiore al minimo gestito FULL UPGRADE
+                        }
+                    }
                     $link = dbconnect();
 
                     $query = "SELECT MIN(UNIX_TIMESTAMP(`datemod`)) as `dateminmod` FROM blk_urls WHERE `list`='".$idl."' ";
@@ -322,7 +341,7 @@ function operationsLog($op,$user,$app,$deviceId){
  function getMetaSmsFromList($idTrack){
     $ret = array();
     $link = dbconnect();
-    $query = "SELECT `id`,`description`,`updated`,`mintimestamp`,`version` as `pkversion`, UNIX_TIMESTAMP(CURRENT_TIMESTAMP) as `version`, `nsms`, `md5` FROM `blk_smslists` WHERE id IN ( SELECT `smslist` FROM `blk_apps` WHERE `code`='".$idTrack."' )";
+    $query = "SELECT `id`,`description`,`updated`,UNIX_TIMESTAMP(`mintimestamp`) as `mintimestamp`,`version` as `pkversion`, UNIX_TIMESTAMP(CURRENT_TIMESTAMP) as `version`, `nsms`, `md5` FROM `blk_smslists` WHERE id IN ( SELECT `smslist` FROM `blk_apps` WHERE `code`='".$idTrack."' )";
      if($result = mysqli_query( $link , $query )){
       if ($row = mysqli_fetch_assoc($result)) {
        $ret = $row;
@@ -404,20 +423,78 @@ function insertSmsDetected($url,$user,$app,$deviceId){
      mysqli_close($link);
  }
  
+ 
+function subscribeDeviceToPushList($idTrack,$deviceId,$fcmId,$en){
+     $ret = null;
+     $link = dbconnect();
+     $idTracki = mysqli_real_escape_string($link,$idTrack);
+     $deviceIdi = mysqli_real_escape_string($link,$deviceId);
+     $fcmIdi = mysqli_real_escape_string($link,$fcmId);
+     $eni = 0;
+     if($en=="1" || $en==1 || strtolower($en)=="true" || $en === true ){
+     		$eni = 1;	
+     }
+     
+     $query = "SELECT `enabled` FROM `blk_pushlists` WHERE `code`='".$idTracki."' AND `deviceId`='".$deviceIdi."' ";
+      if($result = mysqli_query( $link , $query )){
+	       if ($row = mysqli_fetch_assoc($result)) { //AND `fcmId`='".$fcmIdi."'
+		       	if($row['enabled'] == $eni && $row['fcmId'] == $fcmIdi ) {	
+		       		$ret = true;
+		       	}else{
+		       		$query = "UPDATE `blk_pushlists` SET `enabled` = '".$eni."', `fcmId`='".$fcmIdi."' WHERE `code`='".$idTracki."' AND `deviceId`='".$deviceIdi."'";
+	 						mysqli_query( $link , $query );	
+	 						$ret = true;
+		       	}
+		     }else{
+		     		$query = "INSERT INTO `blk_pushlists` ( `ts`, `code`, `deviceId`, `fcmId`, `enabled`) VALUES ('".date("Y-m-d H:i:s")."', '".$idTracki."','".$deviceIdi."', '".$fcmIdi."', '".$eni."');";
+ 						mysqli_query( $link , $query );	
+ 						$ret = true;
+		     }
+		     
+      }
+      mysqli_close($link);
+     return $ret;	
+}
+
+function listSubscribeDeviceToPush($deviceId,$fcmId){
+     $ret = array();
+     $link = dbconnect();
+     $deviceIdi = mysqli_real_escape_string($link,$deviceId);
+     $fcmIdi = mysqli_real_escape_string($link,$fcmId);
+     
+     $query = "SELECT `code` FROM `blk_pushlists` WHERE `enabled`=1 AND `deviceId`='".$deviceIdi."' AND `fcmId`='".$fcmIdi."'";
+     //die($query);
+     if($result = mysqli_query( $link , $query )){
+	       while ($row = mysqli_fetch_assoc($result)) {
+	       		$ret[] = $row['code'];
+		       	
+		     }
+		 }
+     mysqli_close($link);
+     return implode("|",$ret);	
+}
+ 
+ 
 //global $RHD_redirect;
- $type = array_key_exists("type", $_GET)?trim($_GET["type"]):"";
+ $type = array_key_exists("type", $_GET)?trim($_GET["type"]):"url";
  
  $idTrack = array_key_exists("idTrack", $_POST)?$_POST["idTrack"]:"";
  $user = array_key_exists("user", $_POST)?trim($_POST["user"]):"";
  $rest_key = array_key_exists("rest_key", $_POST)?trim($_POST["rest_key"]):"";
  $reportUrl = array_key_exists("reportUrl", $_POST)?trim($_POST["reportUrl"]):"";
+ $subPush = array_key_exists("subPush", $_POST)?trim($_POST["subPush"]):"";
+ $unsubPush = array_key_exists("unsubPush", $_POST)?trim($_POST["unsubPush"]):""; 
+ $listPush = array_key_exists("listPush", $_POST)?trim($_POST["listPush"]):""; 
  $deviceId = array_key_exists("deviceid", $_POST)?trim($_POST["deviceid"]):"";
  $blockedNumber = array_key_exists("blockedNumber", $_POST)?trim($_POST["blockedNumber"]):"";
  $reportSms = array_key_exists("reportSms", $_POST)?trim($_POST["reportSms"]):"";
  $lastUpdate = array_key_exists("lastUpdate", $_POST)?trim($_POST["lastUpdate"]):"";
+ //  $lastUpdate = "";  // Riattivo la gestione degli aggiornamenti parziali
  $lastUpdateBase = "";
+ $encode = false;
+ $gzippa = false;
  
- $sigenabled = true;
+ $sigenabled = false;
 if(array_key_exists("debug", $_GET) && $_GET["debug"]=="2"){
     print_r($_SERVER);
     print_r($_GET);
@@ -428,20 +505,31 @@ if(array_key_exists("debug", $_GET) && $_GET["debug"]=="1"){
     $type = "url";
     //$type = "sms";
     //$type = "call"; 
-    $idTrack = "it.alfagroup.rhdcyberth.cyberThreat";
+    //$idTrack = "it.alfagroup.rhdcyberth.cyberThreat";
     //$idTrack = "it.alfagroup.rhdcyberth.cyberThreat";
     //$idTrack = "it.alfagroup.rhdCyberthExample.BlockExt";
     // $idTrack = "it.alfagroup.rhdCyberthExample.BlockSmsExt";
     //$idTrack = "it.alfagroup.rhdCyberth.BlockCall";
+    $idTrack = "it.alfagroup.cybtest.cyberThreat";
+    	
     $user = "dmasotti";
     $rest_key = "rhd";
-    $deviceId = 'idxx';
+    
+    $deviceId = '55AB015A-6206-4C16-9B7C-00D87F77DDDAcyb';
+    //$listPush = 'cfYSxTGvw0LWih6Xa_KTks:APA91bE3KkTt06nJe840xLG8rJD5rY1KrWcjLvpmYoBpqN0pU_Yy9gyHKqzHdMDBvxb1aRKM3V_WpotBbW42J4-v2CPHSPUHFZAohnUlxWp9zjxwhYLXVHw9Krab9SxQAJQb_DaCoH-m';
     // $reportUrl = "xxx";
     
-    $lastUpdate = "1697786660";
+    $lastUpdate = "1707656142";
  
 }
- if(trim($lastUpdate)!=""){
+if(array_key_exists("encode", $_GET) && $_GET["encode"]=="1"){
+    $encode = true;
+}
+if(array_key_exists("gzippa", $_GET) && $_GET["gzippa"]=="1"){
+    $gzippa = true;
+}
+
+if(trim($lastUpdate)!=""){
         if (is_numeric($lastUpdate) && (string)(int)$lastUpdate === $lastUpdate
                  && $lastUpdate <= PHP_INT_MAX
                  && $lastUpdate >= ~PHP_INT_MAX) {
@@ -455,7 +543,7 @@ if(array_key_exists("debug", $_GET) && $_GET["debug"]=="1"){
         } 
   }
  
-  if($reportSms!=""){
+ if($reportSms!=""){
      insertSmsDetected($reportSms,$user,$idTrack,$deviceId);
       operationsLog('insertSmsDetected',$user,$app,$deviceId);
             echo "1:<H1>URL Inserito nel nostro db :".$reportSms." </H1>";
@@ -474,6 +562,32 @@ if(array_key_exists("debug", $_GET) && $_GET["debug"]=="1"){
             echo "1:<H1>URL Inserito nel nostro db :".$reportUrl." </H1>";
      die();
  }
+ 
+ if($subPush!=""){
+     //insertReportUrl($reportUrl,$user,$idTrack,$deviceId);
+     subscribeDeviceToPushList($idTrack,$deviceId,$subPush,true);
+     operationsLog('subPush',$user,$app,$deviceId);
+            echo "1:<H1>Device iscritto :".$subPush." </H1>";
+     die();
+ }
+ 
+ if($unsubPush!=""){
+     //insertReportUrl($reportUrl,$user,$idTrack,$deviceId);
+     subscribeDeviceToPushList($idTrack,$deviceId,$unsubPush,false);
+     operationsLog('unsubPush',$user,$app,$deviceId);
+            echo "1:<H1>Device iscritto :".$unsubPush." </H1>";
+     die();
+ }
+ 
+ if($listPush!=""){
+     //insertReportUrl($reportUrl,$user,$idTrack,$deviceId);
+     $ret = listSubscribeDeviceToPush($deviceId,$listPush);
+     operationsLog('listPush',$user,$app,$deviceId);
+            echo "1:".$ret;
+     die();
+ }
+ 
+ 
  
  //generachiavi();
  //testChiavi();
@@ -541,7 +655,7 @@ if(array_key_exists("debug", $_GET) && $_GET["debug"]=="1"){
 
  $meta = getMetaSmsFromList($idTrack);
 
- $lastUpdateBase = getSmsMinDateFromList($meta['id'],$lastUpdateBase);
+ $lastUpdateBase = getSmsMinDateFromList($meta['id'],$lastUpdateBase,$meta);
 
  if($lastUpdateBase != "" && trim($meta['mintimestamp'])!="" ){
     $mintimestamp = $meta['mintimestamp'];
@@ -562,7 +676,7 @@ if(array_key_exists("debug", $_GET) && $_GET["debug"]=="1"){
 ?>
 # Title: Blocklist <?php echo $idTrack; ?> 
 # Description: <?php echo $meta["description"]." MD5 ".$meta["md5"]." PK ".$meta["pkversion"]; ?> 
-# Updated: <?php echo date('m/d/Y h-i-s', strtotime($meta["updated"])); ?> 
+# Updated: <?php echo date('m/d/Y h-i-s'); ?> 
 # Version: <?php echo $meta["version"]; ?> 
 # Domain Count: <?php echo count($urls)." ".$meta["nsms"]; ?> 
 # Redir: <?php echo  urlencode($RHD_redirect); ?> 
@@ -604,41 +718,43 @@ if(array_key_exists("debug", $_GET) && $_GET["debug"]=="1"){
  }
  
  $meta = getMetaFromList($idTrack);
-
- $lastUpdateBase = getUrlsMinDateFromList($meta['id'],$lastUpdateBase);
-
+ $lastUpdateBase = getUrlsMinDateFromList($meta['id'],$lastUpdateBase,$meta);
  if($lastUpdateBase != "" && trim($meta['mintimestamp'])!="" ){
     $mintimestamp = $meta['mintimestamp'];
     if (is_numeric($mintimestamp) && (string)(int)$mintimestamp === $mintimestamp
                && $mintimestamp <= PHP_INT_MAX
                && $mintimestamp >= ~PHP_INT_MAX) {
                // La variabile $mintimestamp contiene un timestamp UNIX valido
+               //echo "result ".((int)$lastUpdateBase) - ((int)$mintimestamp)."<br>";
                if(((int)$lastUpdateBase)<((int)$mintimestamp)){ // se il timestamp è minore del minimo gestito, forzo aggiornamento completo
                    $lastUpdateBase = "";
                }
     } 
  }
-
  $urls = getUrlsFromList($meta['id'],$lastUpdateBase);
  //print_r($urls);
  
  operationsLog('getUrls',$user,$idTrack,$deviceId);
 
-?>
+/*  TOLTO metadata non necessari per risparmiare traffico
 # Title: Blocklist <?php echo $idTrack; ?> 
 # Description: <?php echo $meta["description"]." MD5 ".$meta["md5"]." PK ".$meta["pkversion"]; ?> 
-# Updated: <?php echo date('m/d/Y h-i-s', strtotime($meta["updated"])); ?> 
-# Version: <?php echo $meta["version"]; ?> 
+# Updated: <?php echo date('m/d/Y h-i-s'); ?> 
 # Domain Count: <?php echo count($urls)." ".$meta["urls"]; ?> 
-# Redir: <?php echo  urlencode($RHD_redirect); ?> 
 # User: <?php echo str_replace(":","-",$user); ?> 
 # DeviceId: <?php echo str_replace(":","-",$deviceId); ?> 
-<?php
- if($lastUpdateBase!="") echo "# PartialFrom:".$lastUpdateBase."\n";
-?>
 #===============================================================
 
+
+*/
+
+?>
+# Version: <?php echo $meta["version"]; ?> 
+# Redir: <?php echo  urlencode($RHD_redirect); ?> 
 <?php
+ if($lastUpdateBase!="") echo "# PartialFrom:".$lastUpdateBase."\n";
+// echo "# Mintimestamp:".$meta["mintimestamp"]."\n";
+?><?php
              // $u['type']  se = D o = d da eliminare, se = 1 blocchi il percorso completo (e solo il percorso completo e si elimina con D) , altrimenti blocchi su regex String(format: "https?://(www.)?%@.*", tr) (e si elimina con d) 
      foreach($urls as $u){
              $t = $u['type'];
@@ -646,9 +762,8 @@ if(array_key_exists("debug", $_GET) && $_GET["debug"]=="1"){
                      if($t=='1') $t = 'D';
                      else $t = 'd';
              }
-         echo $u['url'].",".$t." # ".$u["description"]." ".$u["datemod"]." ".$u["verdate"]." ".$u["deleted"]."\n";
+         echo $u['url'].",".$t."\n";//." # ".$u["description"]." ".$u["datemod"]." ".$u["verdate"]." ".$u["deleted"]."\n";
      }
   }
   $outputContent = ob_get_clean();
   echo signatureHandler($outputContent);
-?>
